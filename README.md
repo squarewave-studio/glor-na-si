@@ -14,32 +14,53 @@ The one thing I keep returning to is the roof-box at Newgrange. For a few minute
 
 ## Firmware
 
-v0.1 runs on a Daisy Seed in a Synthux Simple Touch. One sound and one gesture: strike a drum, then walk the passage and hear the chamber answer back.
+v0.2 runs on a Daisy Seed in a Synthux Simple Touch. Two sounds and one gesture: strike a drum or hold a chant, then walk the passage and hear the chamber answer back.
 
 The firmware is a fork of Synthux Academy's [TouchString](https://github.com/Synthux-Academy/TouchString), with the string engine swapped for a drum and a chamber. See [CREDITS.md](CREDITS.md).
 
 ### Controls
 
+<img src="touch.jpeg" width="300"/>
+
+The board picture is Synthux Academy's, from the [TouchString](https://github.com/Synthux-Academy/TouchString) repository.
+
+#### Switches
+- **S07/S08** (right)
+  - **Up**: Voice
+  - **Centre** or **Down**: Drum
+- **S09/S10** (left)
+  - **Up**: Latch. Voices keep singing after their pads come up, and carry across to Drum so you can play the drum over them
+  - **Centre** or **Down**: off
+
 #### Pads
-- P00, P03, P04, P08, P01, P05 - drum strikes
-- P02, P06, P07, P09, P10, P11 - unused
+- Drum: the front row P03 to P07 strike, rising left to right, and P09 below gives the top note
+- Drum loop: hold P10, play the drum pads, let go and it loops what you played from the first hit. Hold for the length of the bar, or let go late and it still comes round on time. P11 clears it. The loop keeps going when you switch to Voice, so you can sing over it
+- Voice: two voices. Each pad is a vowel at an interval above the pitch knob
+  - P03 mmm, P04 ooh, P05 oh, P06 aah, P07 ah, at the root
+  - P08 ooh, P09 aah, a fifth up
+  - P00 ooh, P01 aah, an octave up. P02 overtone, a fifth up
+  - A pad takes a silent voice first, then a latched one, then the older of the two. Let go and it closes unless latched
 
-The pads are tuned to 110 Hz and below. Acoustic surveys of passage tombs in Ireland and Britain (Jahn, Devereux and Ibison, 1996) found the chambers resonate between roughly 95 and 120 Hz, so I use 110 Hz for Newgrange. P05 sits on that note. The rest sit under it, where a hit sounds like skin and wood rather than a bell: P01 at 82.5 Hz, P08 at 68.75 Hz, P00 at 55 Hz, P04 at 41.25 Hz and P03 at 36.7 Hz. Hit them all at once and you get one chord ringing the chamber, not six notes.
+The drum is tuned under 110 Hz. Acoustic surveys of passage tombs in Ireland and Britain (Jahn, Devereux and Ibison, 1996) found the chambers resonate between roughly 95 and 120 Hz, so I use 110 Hz for Newgrange, and the room carries that note rather than the hit. The pads sit below it, where a strike sounds like skin and wood rather than a bell: P03 at 36.7 Hz, P04 at 41.25 Hz, P05 at 45.8 Hz, P06 at 55 Hz, P07 at 61.9 Hz and P09 at 68.75 Hz. Hit them all at once and you get one chord ringing the chamber, not six notes.
 
-#### Knobs
-- S32 **Tone** | Drum body, from a woody thud to a metallic ring. Lands on the next strike
-- S33 **Decay** | Drum ring time, clockwise is longer. Lands on the next strike
-- S30, S31, S34, S35 - unused
+Each voice is two chants a few cents apart, built from 24 harmonics measured off a recorded chant at C2. Holding a pad opens a voice from a closed hum into that pad's vowel as it swells. Letting go closes it back down over a little longer.
+
+#### Knobs (clockwise)
+- S31 **Pitch** | Voice pitch, C2 at centre, an octave either way, not quantised, live on every voice. Works in either mode
+- S32 **Tone** | Drum body, from a woody thud to a metallic ring. Lands on the next strike. In Voice it is the **Spread**, how far apart the two singers sit, from one voice to 40 cents
+- S33 **Decay** | Drum ring time, clockwise is longer. Lands on the next strike. In Voice it is the **Swell**, how long a note takes to open, 0.4 s to 3 s
+- S34 **Unsteadiness** | How much each harmonic wanders and the pitch drifts. Centre is the chant as measured, left is still, right is twice as loose. Works in either mode
+- S35 **Level** | Drum level in Drum, voice level in Voice. Centre is the level as built, right is 6 dB up
+- S30 - unused
+
+S32, S33 and S35 change job with the mode. After a switch, each knob keeps the setting that mode last had until you turn it back through that point, so flipping the switch never jumps a sound.
 
 #### Faders
 - S37 (right) **Walk** | Position along the passage. Down is the entrance, up is the chamber. Push it up and the tail gets longer and darker until the room is louder than the drum
 - S36 (left) - read but unused, reserved for the light box
 
-#### Switches
-Unused.
-
 #### LED
-The onboard LED flashes on every strike.
+The onboard LED flashes on every strike in Drum. While a loop is recording it stays on and blinks off for every strike it takes. In Voice it stays on while a voice sings.
 
 ### Project Structure
 ```
@@ -47,7 +68,8 @@ glor-na-si/
 ├── GlorNaSi.cpp         # Main application entry point
 ├── Makefile             # Build configuration
 ├── common/              # Configuration and utilities
-├── tomb/                # Instrument core (drum, chamber, walk)
+├── firmware/            # Built binaries, one per release
+├── mound/               # Instrument core (drum, chant engine, chamber, walk)
 ├── touch/               # Simple Touch wrapper (pads, knobs, switches)
 └── ui/                  # UI connecting instrument core with touch wrapper
 ```
@@ -62,7 +84,7 @@ $ make clean; make -j8
 $ make program-dfu
 ```
 
-For the [Daisy web programmer](https://electro-smith.github.io/Programmer/), flash `build/GlorNaSi.bin`.
+For the [Daisy web programmer](https://electro-smith.github.io/Programmer/), flash `build/GlorNaSi.bin`, or one of the release builds in `firmware/` if you would rather skip the toolchain. [CHANGELOG.md](CHANGELOG.md) says what each one does.
 
 ### Configuration
 Edit [config.h](common/config.h) to retune the pads, the drum ranges and the walk.

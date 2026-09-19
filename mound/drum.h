@@ -16,7 +16,8 @@ public:
   _structure  { .5f },
   _damping    { .5f },
   _brightness { .5f },
-  _accent     { .5f }
+  _accent     { .5f },
+  _gain       { kDrumGain }
   {}
   ~Drum() {}
 
@@ -41,6 +42,11 @@ public:
     _accent = value;
   }
 
+  // Live. Pot centre is kDrumGain.
+  void SetLevel(const float value) {
+    _gain = kDrumGain * daisysp::fmap(value, 0.f, kLevelMax);
+  }
+
   void Strike(const float freq) {
     _voice.SetStructure(_structure);
     _voice.SetDamping(_damping);
@@ -51,7 +57,7 @@ public:
   }
 
   float Process() {
-    return _voice.Process() * kDrumGain;
+    return _voice.Process() * _gain;
   }
 
 private:
@@ -61,6 +67,7 @@ private:
   float _damping;
   float _brightness;
   float _accent;
+  float _gain;
   daisysp::ModalVoice _voice;
 };
 

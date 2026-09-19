@@ -6,7 +6,8 @@ TARGET = GlorNaSi
 USE_DAISYSP_LGPL = 1
 
 # Sources
-CPP_SOURCES = GlorNaSi.cpp $(wildcard touch/*.cpp) $(wildcard tomb/*.cpp) $(wildcard ui/*.cpp)
+CPP_SOURCES = GlorNaSi.cpp $(wildcard touch/*.cpp) $(wildcard mound/*.cpp) $(wildcard ui/*.cpp)
+C_SOURCES = $(wildcard mound/*.c)
 C_INCLUDES = -I$(TOUCHSTRING_DIR)/lib/ -Icommon/
 
 # Library Locations

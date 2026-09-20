@@ -21,6 +21,10 @@ public:
   _semitones   { 0.f },
   _wander_ind  { 0.f },
   _drift_cents { 0.f },
+  _jitter      { 0.f },
+  _shimmer     { 0.f },
+  _amount      { 1.f },
+  _knock       { 0.f },
   _gain        { kVoiceGain }
   {}
   ~Chant() {}
@@ -31,6 +35,8 @@ public:
     // The engine's own tuning, kept so unsteadiness can scale it.
     _wander_ind  = _a.wander_ind;
     _drift_cents = _a.drift_cents;
+    _jitter      = _a.jitter;
+    _shimmer     = _a.shimmer;
   }
 
   void SetGate(const bool on) {
@@ -64,11 +70,24 @@ public:
   // The shared wander breathes the whole level, so it stays as tuned or
   // full unsteadiness surges into the clipper.
   void SetUnsteadiness(const float value) {
-    auto amount = daisysp::fmap(value, 0.f, kVoiceUnsteadyMax);
-    for (auto v : { &_a, &_b }) {
-      v->wander_ind  = _wander_ind * amount;
-      v->drift_cents = _drift_cents * amount;
+    _amount = daisysp::fmap(value, 0.f, kVoiceUnsteadyMax);
+    _apply();
+  }
+
+  // A knock: the wander, drift and rasp jump by this much, times the
+  // unsteadiness, and settle back. The owner calls Settle every block.
+  void Knock(const float amount) {
+    if (amount > _knock) {
+      _knock = amount;
+      _apply();
     }
+  }
+
+  void Settle(const float seconds) {
+    if (_knock <= 0.f) return;
+    _knock *= expf(-seconds / kKnockSeconds);
+    if (_knock < 1e-3f) _knock = 0.f;
+    _apply();
   }
 
   // Profile index, 0 mmm .. 5 overtone, fractional is a blend.
@@ -104,12 +123,27 @@ private:
     _a.f0 = _b.f0 = kVoicePitch * exp2f(_octaves + _semitones / 12.f);
   }
 
+  void _apply() {
+    auto amount = _amount * (1.f + _knock);
+    auto rasp = 1.f + _knock * _amount;
+    for (auto v : { &_a, &_b }) {
+      v->wander_ind  = _wander_ind * amount;
+      v->drift_cents = _drift_cents * amount;
+      v->jitter      = _jitter * rasp;
+      v->shimmer     = _shimmer * rasp;
+    }
+  }
+
   chant_voice _a;
   chant_voice _b;
   float _octaves;
   float _semitones;
   float _wander_ind;
   float _drift_cents;
+  float _jitter;
+  float _shimmer;
+  float _amount;
+  float _knock;
   float _gain;
 };
 

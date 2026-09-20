@@ -18,30 +18,31 @@ void MoundUI::Process(DaisySeed& hw) {
     // Mode: switch A up is VOICE, anything else is DRUM ..........
     _voice = _touch.switches().A() == Switch3::POS_UP;
 
-    // Latch: switch B up keeps the note after the pads are up, and
-    // across a switch to DRUM so the drum can play over it .......
-    _latch = _touch.switches().B() == Switch3::POS_UP;
-
     _touch.Process();
 
-    // Walk (real-time) ...........................................
-    _mound.SetWalk(_touch.knobs().s37().Process());
+    // Walk, the left fader, so the right hand stays on the pads ...
+    _mound.SetWalk(_touch.knobs().s36().Process());
 
-    // Light box (reserved) .......................................
-    _light_box = _touch.knobs().s36().Process();
+    // Light box (reserved), the right fader ......................
+    _light_box = _touch.knobs().s37().Process();
+
+    // Loop speed, in either mode, as played at centre ..............
+    _loop_rate = exp2f(daisysp::fmap(_touch.knobs().s30().Process(), -kLoopSpeedOctaves, kLoopSpeedOctaves));
 
     auto pitch    = _touch.knobs().s31().Process();
     auto tone     = _touch.knobs().s32().Process();
     auto time     = _touch.knobs().s33().Process();
     auto unsteady = _touch.knobs().s34().Process();
     auto level    = _touch.knobs().s35().Process();
-    // Voice pitch and unsteadiness, in either mode ...............
-    _mound.SetPitch(pitch);
-    _mound.SetUnsteadiness(unsteady);
-
-    // Drum tone and decay, voice spread and swell, share S32 and
-    // S33. The inactive pair holds, and picks up when the knob
-    // comes back to where it left that pair ......................
+    // S31 is the drum tuning in DRUM and the voice pitch in VOICE,
+    // S34 the hardness in DRUM and the unsteadiness in VOICE, S32 and
+    // S33 the drum tone and decay or the voice spread and swell. The
+    // inactive job holds, and picks up when the knob comes back to
+    // where it left it ........................................
+    _mound.SetDrumTune(_drum_tune.Process(pitch, !_voice));
+    _mound.SetPitch(_voice_pitch.Process(pitch, _voice));
+    _mound.SetDrumHardness(_drum_hardness.Process(unsteady, !_voice));
+    _mound.SetUnsteadiness(_voice_unsteady.Process(unsteady, _voice));
     _mound.SetDrumTone(_drum_tone.Process(tone, !_voice));
     _mound.SetDrumDecay(_drum_decay.Process(time, !_voice));
     _mound.SetSpread(_voice_spread.Process(tone, _voice));
@@ -52,79 +53,168 @@ void MoundUI::Process(DaisySeed& hw) {
     _mound.SetDrumLevel(_drum_level.Process(level, !_voice));
     _mound.SetVoiceLevel(_voice_level.Process(level, _voice));
 
-    // Latch down lets go of every voice whose pad is up ..........
     bool singing = false;
-    for (uint8_t v = 0; v < kVoiceCount; v++) {
-        if (_voices[v].sounding && _voices[v].pad < 0 && !_latch) _stop(v);
-        singing |= _voices[v].sounding;
-    }
+    for (uint8_t v = 0; v < kVoiceCount; v++) singing |= _voices[v].sounding;
 
-    // Drum loop, in either mode ..................................
+    // The loop, in either mode ...................................
     if (_recording) {
         _loop_tick++;
+        if (_loop_tick - _last_step >= kLoopIdleTicks || _loop_tick >= 60000) _end_take(true);
     } else if (_loop_length > 0) {
-        for (uint8_t i = 0; i < _loop_count; i++) {
-            if (_loop[i].tick == _loop_tick) _strike(_loop[i].drum);
+        auto from = _loop_phase;
+        auto to = from + _loop_rate;
+        _play(from, to);
+        if (to >= (float)_loop_length) {
+            to -= (float)_loop_length;
+            _play(0.f, to);
         }
-        if (++_loop_tick >= _loop_length) _loop_tick = 0;
+        _loop_phase = to;
     }
 
     // LED flashes on a strike, and while recording stays on and
-    // blinks off for every strike it takes. Singing in VOICE ......
+    // blinks off for everything it takes. Singing in VOICE ........
     if (_led_ticks > 0) _led_ticks--;
     auto flash = _led_ticks > 0;
     hw.SetLed(_voice ? singing : (_recording ? !flash : flash));
 };
 
+// P10 takes and P11 clears, in either mode. Tap P10, and what you play
+// until the next tap comes round again from the first thing you played:
+// drum hits, and vowels, each where you stood. A vowel still down when
+// the take ends is the loop's from then on and keeps singing when the
+// pad comes up. A take with nothing played for a while ends itself.
 void MoundUI::_on_pad_touch(uint16_t pad) {
     if (pad == kLoopClearPad) {
         _recording = false;
         _loop_count = 0;
         _loop_length = 0;
+        for (uint8_t v = 0; v < kVoiceCount; v++) {
+            if (_voices[v].held) _stop(v);
+            _voices[v].recorded = false;
+        }
+        return;
+    }
+    if (pad == kLoopRecordPad) {
+        if (_recording) _end_take(false);
+        else _begin_take();
         return;
     }
     if (_voice) {
         for (uint8_t i = 0; i < kVoicePadCount; i++) {
             if (kVoicePads[i].pad != pad) continue;
-            _start(i);
+            auto at = _mound.Listener();
+            if (_recording) _record(SING, i, at);
+            _start(i, at, false);
             return;
         }
         return;
     }
-    if (pad == kLoopRecordPad) {
-        _recording = true;
-        _loop_count = 0;
-        _loop_length = 0;
-        _loop_tick = 0;
-        return;
-    }
     for (uint8_t i = 0; i < kDrumPadCount; i++) {
         if (kDrumPads[i] != pad) continue;
-        if (_recording && _loop_count < kLoopSteps) {
-            _loop[_loop_count++] = { _loop_tick, i };
-        }
-        _strike(i);
-        #if DEBUG
-        LOGINT(pad);
-        #endif
+        auto at = _mound.Listener();
+        if (_recording) _record(STRIKE, i, at);
+        _strike(i, at);
         return;
     }
 };
 
-void MoundUI::_strike(uint8_t index) {
-    _mound.Strike(index);
+void MoundUI::_on_pad_release(uint16_t pad) {
+    for (uint8_t v = 0; v < kVoiceCount; v++) {
+        if (_voices[v].held || _voices[v].pad < 0 || kVoicePads[_voices[v].pad].pad != pad) continue;
+        if (_recording && _voices[v].recorded) _record(REST, _voices[v].pad, _mound.Listener());
+        _stop(v);
+    }
+};
+
+// A new take replaces the loop and lets go of what it held. Vowels
+// already under your fingers count as pressed at the start.
+void MoundUI::_begin_take() {
+    for (uint8_t v = 0; v < kVoiceCount; v++) {
+        if (_voices[v].held) _stop(v);
+    }
+    _recording = true;
+    _loop_count = 0;
+    _loop_length = 0;
+    _loop_tick = 0;
+    _last_step = 0;
+    for (uint8_t v = 0; v < kVoiceCount; v++) {
+        if (!_voices[v].sounding || _voices[v].pad < 0) continue;
+        _voices[v].recorded = true;
+        _record(SING, _voices[v].pad, _voices[v].at);
+    }
+};
+
+// Nothing played, nothing loops. A vowel taken during the take and
+// still down is the loop's now. A take that ended itself is trimmed,
+// one ended by a tap is exactly as long as the tap made it.
+void MoundUI::_end_take(bool trim) {
+    _recording = false;
+    _loop_length = _loop_count > 0 ? _bar(_loop_tick, trim) : 0;
+    _loop_tick = 0;
+    _loop_phase = 0.f;
+    for (auto& v : _voices) {
+        if (_loop_length > 0 && v.recorded && v.sounding && v.pad >= 0) v.held = true;
+        v.recorded = false;
+    }
+};
+
+void MoundUI::_record(Kind kind, uint8_t index, float at) {
+    if (_loop_count >= kLoopSteps) return;
+    _loop[_loop_count++] = { _loop_tick, kind, index, at };
+    _last_step = _loop_tick;
     _led_ticks = kLedStrikeTicks;
 };
 
-// The bar. Strikes shift so the first sits at 0, and the length is the
-// hold or, when the hold ran on past the last strike, the last strike
-// plus the median gap between strikes, whichever is shorter. A late
-// release then leaves no dead air, an early one still cuts the bar.
-uint16_t MoundUI::_bar(const uint16_t hold) {
+// The loop plays a hit where it was struck. A vowel it starts is its to
+// hold. One it started last time round and never ended just goes on
+// singing rather than starting again, and it never takes a vowel from
+// under your fingers.
+// Every step from one tick up to the next, at whatever speed S30 says.
+void MoundUI::_play(const float from, const float to) {
+    for (uint8_t i = 0; i < _loop_count; i++) {
+        auto tick = (float)_loop[i].tick;
+        if (tick >= from && tick < to) _replay(_loop[i]);
+    }
+};
+
+void MoundUI::_replay(const Step& step) {
+    switch (step.kind) {
+    case STRIKE:
+        _strike(step.index, step.at);
+        break;
+    case SING: {
+        bool free = false;
+        for (auto& v : _voices) {
+            if (v.held && v.sounding && v.pad == step.index) return;
+            free |= !v.sounding || v.held;
+        }
+        if (free) _start(step.index, step.at, true);
+        break;
+    }
+    case REST:
+        for (uint8_t v = 0; v < kVoiceCount; v++) {
+            if (_voices[v].held && _voices[v].pad == step.index) _stop(v);
+        }
+        break;
+    }
+};
+
+void MoundUI::_strike(uint8_t index, float at) {
+    _mound.Strike(index, at);
+    _led_ticks = kLedStrikeTicks;
+};
+
+// The bar. Steps shift so the first sits at 0. Ended by a tap, the
+// length is the tap, rests and all. Ended by itself, the length is the
+// last step plus the median gap between steps, so the wait it took to
+// give up is not in the bar; a single hit then nothing is no loop, a
+// single vowel still held is a drone.
+uint16_t MoundUI::_bar(const uint16_t hold, const bool trim) {
     auto lead = _loop[0].tick;
     for (uint8_t i = 0; i < _loop_count; i++) _loop[i].tick -= lead;
     uint16_t length = hold - lead;
-    if (_loop_count > 1) {
+    if (trim && _loop_count == 1 && _loop[0].kind == STRIKE) return 0;
+    if (trim && _loop_count > 1) {
         std::array<uint16_t, kLoopSteps> gaps;
         uint8_t count = 0;
         for (uint8_t i = 1; i < _loop_count; i++) {
@@ -139,46 +229,39 @@ uint16_t MoundUI::_bar(const uint16_t hold) {
         uint16_t span = _loop[_loop_count - 1].tick + gaps[count / 2];
         if (span < length) length = span;
     }
-    return length > 0 ? length : 1;
+    if (length < kLoopMinTicks) length = kLoopMinTicks;
+    for (uint8_t i = 0; i < _loop_count; i++) {
+        if (_loop[i].tick >= length) _loop[i].tick = length - 1;
+    }
+    return length;
 };
 
-void MoundUI::_on_pad_release(uint16_t pad) {
-    if (pad == kLoopRecordPad && _recording) {
-        // Nothing played, nothing loops.
-        _recording = false;
-        _loop_length = _loop_count > 0 ? _bar(_loop_tick) : 0;
-        _loop_tick = 0;
-        return;
-    }
-    for (uint8_t v = 0; v < kVoiceCount; v++) {
-        if (_voices[v].pad < 0 || kVoicePads[_voices[v].pad].pad != pad) continue;
-        _voices[v].pad = -1;
-        if (!_latch) _stop(v);
-    }
-};
-
-// A pad takes a silent voice first, then a latched one, then the older
-// of the held. Gate off then on so a stolen voice starts a new syllable.
-void MoundUI::_start(uint8_t index) {
+// A pad takes a silent voice first, then one the loop holds, then the
+// older of the ones under your fingers. Gate off then on so a stolen
+// voice starts a new syllable.
+void MoundUI::_start(uint8_t index, float at, bool held) {
     uint8_t pick = 0;
     uint8_t best = 3;
     uint16_t oldest = 0xffff;
     for (uint8_t v = 0; v < kVoiceCount; v++) {
-        uint8_t rank = !_voices[v].sounding ? 0 : (_voices[v].pad < 0 ? 1 : 2);
+        uint8_t rank = !_voices[v].sounding ? 0 : (_voices[v].held ? 1 : 2);
         if (rank < best || (rank == best && _voices[v].age < oldest)) {
             pick = v;
             best = rank;
             oldest = _voices[v].age;
         }
     }
-    _voices[pick] = { (int8_t)index, true, ++_presses };
+    _voices[pick] = { (int8_t)index, true, held, !held && _recording, ++_presses, at };
     _mound.SetVowel(pick, kVoicePads[index].vowel);
     _mound.SetInterval(pick, kVoicePads[index].semitones);
     _mound.SetSing(pick, false);
-    _mound.SetSing(pick, true);
+    _mound.Sing(pick, at);
 };
 
 void MoundUI::_stop(uint8_t voice) {
     _mound.SetSing(voice, false);
+    _voices[voice].pad = -1;
     _voices[voice].sounding = false;
+    _voices[voice].held = false;
+    _voices[voice].recorded = false;
 };

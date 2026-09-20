@@ -68,7 +68,6 @@ glor-na-si/
 ├── GlorNaSi.cpp         # Main application entry point
 ├── Makefile             # Build configuration
 ├── common/              # Configuration and utilities
-├── firmware/            # Built binaries, one per release
 ├── mound/               # Instrument core (drum, chant engine, chamber, walk)
 ├── touch/               # Simple Touch wrapper (pads, knobs, switches)
 └── ui/                  # UI connecting instrument core with touch wrapper
@@ -84,7 +83,7 @@ $ make clean; make -j8
 $ make program-dfu
 ```
 
-For the [Daisy web programmer](https://electro-smith.github.io/Programmer/), flash `build/GlorNaSi.bin`, or one of the release builds in `firmware/` if you would rather skip the toolchain. [CHANGELOG.md](CHANGELOG.md) says what each one does.
+For the [Daisy web programmer](https://electro-smith.github.io/Programmer/), flash `build/GlorNaSi.bin`, or a build from the [releases page](https://github.com/squarewave-studio/glor-na-si/releases) if you would rather skip the toolchain. [CHANGELOG.md](CHANGELOG.md) says what each one does.
 
 ### Configuration
 Edit [config.h](common/config.h) to retune the pads, the drum ranges and the walk.

@@ -5,14 +5,18 @@
 using namespace synthux;
 using namespace daisysp;
 
-// The lines live in SDRAM on the board, which the startup code does not
-// clear, so Init does. On the desktop they are ordinary statics.
+// The lines live in the core's own DTCM on the board: 128 KB at zero
+// wait states, shared only with the stack. SDRAM and the D2 SRAM are
+// both uncached and unbuffered under libDaisy's MPU, and twenty-five
+// accesses a sample over that bus overran the callback. The startup
+// code does not clear this section, so Init does. On the desktop they
+// are ordinary statics.
 #ifdef STM32H750xx
-#define GLOR_SDRAM __attribute__((section(".sdram_bss")))
+#define GLOR_LINES __attribute__((section(".dtcmram_bss")))
 #else
-#define GLOR_SDRAM
+#define GLOR_LINES
 #endif
-static float GLOR_SDRAM line_memory[Passage::kLineCount][Passage::kLineSize];
+static float GLOR_LINES line_memory[Passage::kLineCount][Passage::kLineSize];
 
 static constexpr float kPi = 3.14159265f;
 static constexpr float kLn1000 = 6.907755f;
@@ -65,7 +69,7 @@ void Passage::Init(const float sample_rate) {
   _listener = _target = kMouthAt;
   for (uint8_t i = 0; i < kSourceCount; i++) {
     auto& s = _sources[i];
-    s.fade_length = (uint32_t)((i == 0 ? kDrumPinFadeSeconds : kPinFadeSeconds) * sample_rate);
+    s.fade_length = (uint32_t)((i < 2 ? kDrumPinFadeSeconds : kPinFadeSeconds) * sample_rate);
     _pin(s, kMouthAt, false);
   }
 
@@ -97,11 +101,9 @@ void Passage::SetWalk(const float value) {
   _target = fmap(fclamp(value, 0.f, 1.f), -kOutsideMetres, kPassageMetres + kChamberMetres);
 }
 
-void Passage::Pin(const uint8_t source, const float metres, const bool fade) {
+void Passage::PinNow(const uint8_t source, const float metres, const bool fade) {
   if (source >= kSourceCount) return;
-  _sources[source].request = metres;
-  _sources[source].request_fade = fade;
-  _sources[source].pending.store(true, std::memory_order_release);
+  _pin(_sources[source], metres, fade);
 }
 
 // A pin that lands inside a running fade starts the new fade from
@@ -115,6 +117,8 @@ void Passage::_pin(Source& s, const float metres, const bool fade) {
     s.from_to_mouth = s.to_mouth;
     s.from_g_chamber = s.g_chamber;
     s.from_g_mouth = s.g_mouth;
+    s.from_g_direct = s.g_direct;
+    s.from_lp_a = s.lp.a;
   }
   s.at = metres;
   s.fade = fade ? s.fade_length : 0;
@@ -156,12 +160,6 @@ void Passage::_colour(Peak& p, const float hz, const float db) {
 }
 
 void Passage::Update() {
-  for (auto& s : _sources) {
-    if (!s.pending.load(std::memory_order_acquire)) continue;
-    s.pending.store(false, std::memory_order_relaxed);
-    _pin(s, s.request, s.request_fade);
-  }
-
   auto here = _listener;
 
   // Outside the entrance the mound is behind you: quieter and duller
@@ -249,12 +247,17 @@ void Passage::Process(const std::array<float, kSourceCount>& in, float& left, fl
   for (uint8_t i = 0; i < kSourceCount; i++) {
     auto& s = _sources[i];
     auto x = _lines[i].Read(fabsf(_listener - s.at) * _spm);
+    auto g = s.g_direct;
+    auto a = s.lp.a;
     if (blend[i] > 0.f) {
       auto was = _lines[i].Read(fabsf(_listener - s.from) * _spm);
       x += (was - x) * blend[i];
+      g += (s.from_g_direct - g) * blend[i];
+      a += (s.from_lp_a - a) * blend[i];
       s.fade--;
     }
-    direct += s.lp.Process(x) * s.g_direct;
+    s.lp.y += a * (x - s.lp.y);
+    direct += s.lp.y * g;
   }
   auto dc = fabsf(_listener - kChamberAt) * _spm;
   auto cl = _chamber_lp_l.Process(_chamber_l.Read(dc)) * _g_chamber_ret;

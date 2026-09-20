@@ -10,34 +10,87 @@
 // room: 48 overran, 96 at 480 MHz peaks around 80% with one voice.
 static constexpr size_t kAudioBlockSize = 96;
 
-// Drum ...................................................................
-static constexpr uint8_t kDrumPadCount = 6;
-// Front row left to right, rising, then P09 below for the top note. All
-// under the chamber's 110 Hz: above about 70 Hz this body turns bell-like.
-static constexpr std::array<uint8_t, kDrumPadCount> kDrumPads    = { 3, 4, 5, 6, 7, 9 };
-static constexpr std::array<float,   kDrumPadCount> kDrumPitches = { 36.67f, 41.25f, 45.83f, 55.f, 61.88f, 68.75f };
+// Skin ...................................................................
+// A drum skin: eight modes of a circular membrane at the Bessel ratios.
+// A strike rings each mode as much as the mode's shape says at the
+// strike's radius, so the centre rings the round modes, deep and pure,
+// and the rim rings the rest, thin and bright. Pads are places on the
+// skin, not notes. Nothing rings at the rim itself, so radii stay under
+// 0.9.
+struct SkinPad {
+  uint8_t pad;
+  float   radius;   //0 centre, 1 rim
+  float   hard;     //added to the hardness, the stick near the rim
+  float   gain;     //the skin barely moves near the rim, so those hits are lifted, all modes alike
+};
+static constexpr uint8_t kSkinPadCount = 7;
+static constexpr std::array<SkinPad, kSkinPadCount> kSkinPads = {{
+  { 3, 0.9f, 0.35f, 2.6f }, { 4, 0.65f, 0.1f, 1.3f }, { 5, 0.f, 0.f, 1.f }, { 6, 0.45f, 0.f, 1.1f }, { 7, 0.8f, 0.25f, 2.f }, // front row, a line across the skin
+  { 8, 0.92f, 0.3f, 3.f }, { 9, 0.85f, 0.6f, 2.4f },                                                                // below, the stick near the rim
+}};
 
-static constexpr float kDrumGain          = 0.5f;
-static constexpr float kDrumStructureMin  = 0.05f;
-static constexpr float kDrumStructureMax  = 0.6f;
-static constexpr float kDrumDampingMin    = 0.25f;
-static constexpr float kDrumDampingMax    = 0.8f;
-// S34 in Drum is the hardness, soft mallet to hard stick: the exciter's
-// brightness and accent together, centre is as it was. S31 in Drum tunes
-// the pads an octave either way.
-static constexpr float kDrumBrightnessMin = 0.1f;
-static constexpr float kDrumBrightnessMax = 0.6f;
-static constexpr float kDrumAccentMin     = 0.6f;
-static constexpr float kDrumAccentMax     = 1.f;
-static constexpr float kDrumTuneOctaves   = 1.f;
-// A skin starts sharp and settles as the tension gives: this much sharp
-// at a hard hit, settling with this time constant.
-static constexpr float kDrumDropAmount    = 0.12f;
-static constexpr float kDrumDropSeconds   = 0.06f;
-// The body costs the same silent as struck, so it stops once its output
-// has sat under this for a while and runs again on the next strike.
-static constexpr float kDrumSilence       = 1e-5f;
-static constexpr float kDrumSilentSeconds = 0.05f;
+struct SkinMode {
+  uint8_t m;        //nodal diameters
+  float   zero;     //Bessel zero, the mode's frequency over the first's is zero / 2.4048
+  float   gain;     //how well it radiates
+};
+static constexpr uint8_t kSkinModeCount = 12;
+static constexpr std::array<SkinMode, kSkinModeCount> kSkinModes = {{
+  { 0, 2.4048f, 1.f  }, { 1, 3.8317f, 0.9f }, { 2, 5.1356f, 0.7f }, { 0, 5.5201f, 0.6f },
+  { 3, 6.3802f, 0.6f }, { 1, 7.0156f, 0.5f }, { 4, 7.5883f, 0.45f }, { 2, 8.4172f, 0.4f },
+  { 0, 8.6537f, 0.35f }, { 5, 8.7715f, 0.35f }, { 3, 9.7610f, 0.3f }, { 1, 10.1735f, 0.3f },
+}};
+
+static constexpr float kSkinFundamental  = 55.f;   //Hz, S31 in Drum at centre
+static constexpr float kSkinSizeOctaves  = 1.f;    //S31, half to double the drum
+static constexpr float kSkinStiffnessMax = 0.02f;  //S32, stretches the upper modes as a hide does
+static constexpr float kSkinDecayMin     = 1.2f;   //s, T60 of the fundamental, S33 minimum
+static constexpr float kSkinDecayMax     = 4.f;    //s, S33 maximum
+static constexpr float kSkinDecaySlope   = 0.8f;   //higher modes die faster, T60 over ratio to this
+static constexpr float kSkinDropAmount   = 0.07f;  //sharp at a hard hit, settling
+static constexpr float kSkinDropSeconds  = 0.12f;
+// The strike is a mallet: a half-sine pulse of contact time, the same
+// push however hard, so harder means shorter and brighter, not louder,
+// apart from a little accent. A bigger skin gives longer. The head has
+// a size too, a hand at soft to a stick tip at hard, which rounds off
+// the upper modes. The thwack stands in for the hundreds of modes above
+// the eight: a dull burst of noise between a few hundred hertz and a
+// kilohertz that dies in about 20 ms, heard straight. Not a click. The
+// tick, the pulse itself above 600 Hz, is off: it clicked. No two hits
+// are quite the same. S34 in Drum.
+static constexpr float kSkinContactSoft  = 0.008f; //s, at S34 minimum, at the size as built
+static constexpr float kSkinContactHard  = 0.0008f;
+static constexpr float kSkinHeadSoft     = 0.2f;   //head radius over skin radius, a hand
+static constexpr float kSkinHeadHard     = 0.05f;  //a stick tip
+static constexpr float kSkinAccent       = 0.3f;   //level is 1 - accent + accent x hardness
+static constexpr float kSkinSlap         = 0.08f;  //the thwack, at full hardness; a third of it at soft, and more out at the rim
+static constexpr float kSkinSlapSeconds  = 0.006f; //its time constant
+static constexpr float kSkinSlapLow      = 300.f;  //Hz, its band
+static constexpr float kSkinSlapHigh     = 1500.f;
+static constexpr float kSkinVary         = 0.08f;  //random spread of level and contact time, per hit
+static constexpr float kSkinTick         = 0.f;    //the pulse above 600 Hz, heard straight: off, it clicks
+static constexpr float kSkinGain         = 0.3f;   //S35 at centre
+
+// Stone ..................................................................
+// A stone struck with the same stick: the strike into a few short
+// bright modes and no skin at all. Three sizes on the top row in Drum.
+struct StonePad {
+  uint8_t pad;
+  float   hz;
+};
+static constexpr uint8_t kStonePadCount = 3;
+static constexpr std::array<StonePad, kStonePadCount> kStonePads = {{ { 0, 1900.f }, { 1, 2700.f }, { 2, 3800.f } }};
+static constexpr std::array<float, 3> kStoneRatios = { 1.f, 1.63f, 2.51f };
+static constexpr float kStoneDecay   = 0.02f;   //s, T60, short: stone on stone is mostly the strike
+static constexpr float kStoneContact = 0.0002f; //s, at S34 centre; harder is shorter
+static constexpr float kStoneSlap    = 0.5f;    //the strike itself, heard straight: stone on stone is a click
+static constexpr float kStoneSlapSeconds = 0.0006f;
+static constexpr float kStoneSlapLow = 1000.f;  //Hz
+static constexpr float kStoneSlapHigh = 8000.f;
+static constexpr float kStoneGain    = 0.15f;   //S35 at centre
+
+// A strike index is a skin pad, then a stone pad.
+static constexpr uint8_t kDrumPadCount = kSkinPadCount + kStonePadCount;
 
 // Passage ................................................................
 // The mound as a line, in metres along the axis of the passage. The
@@ -62,7 +115,7 @@ static constexpr float kOutsideLossDb     = 8.f;    //extra loss at the fader bo
 static constexpr float kOutsideCutoff     = 0.3f;   //cutoff scale at the fader bottom
 
 static constexpr float kChamberSend       = 1.f;
-static constexpr float kChamberReturn     = 1.5f;
+static constexpr float kChamberReturn     = 2.f;
 static constexpr float kChamberFeedback   = 0.9f;
 static constexpr float kChamberLp         = 4000.f; //Hz
 

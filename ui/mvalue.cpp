@@ -10,6 +10,11 @@ _is_tracking  { false },
 _has_value    { false }
 {};
 
+void MValue::Init(const float value) {
+  _value = value;
+  _has_value = true;
+};
+
 float MValue::Process(const float value, const bool active) {
   if (active && !_is_active) {
     _init_value = value;

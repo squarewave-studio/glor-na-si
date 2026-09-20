@@ -17,13 +17,8 @@ public:
     _light_box { 0.f },
     _led_ticks { 0 },
     _voice { false },
+    _started { false },
     _presses { 0 },
-    _recording { false },
-    _last_step { 0 },
-    _loop_count { 0 },
-    _loop_length { 0 },
-    _loop_tick { 0 },
-    _loop_phase { 0.f },
     _loop_rate { 1.f }
      {
         _voices.fill({ -1, false, false, false, 0, 0.f });
@@ -35,7 +30,7 @@ public:
     void Process(daisy::DaisySeed& hw);
 
 private:
-    // What the loop holds: a drum hit, a vowel starting, a vowel ending.
+    // What a loop holds: a drum hit, a vowel starting, a vowel ending.
     enum Kind : uint8_t { STRIKE, SING, REST };
     struct Step {
         uint16_t tick;
@@ -44,17 +39,33 @@ private:
         float at;        // metres, where the listener stood
     };
 
+    // A loop: what you did between two taps of P10 in one mode, against
+    // the control tick. Every take sets the bar, and a take while a loop
+    // runs replaces it. One for the drum, one for the voices, each with
+    // its own bar, both playing in either mode.
+    struct Loop {
+        bool recording = false;
+        uint16_t idle = 0;         // ticks since the last thing taken
+        uint16_t tick = 0;         // a take counts here
+        uint16_t length = 0;       // the bar, 0 for no loop
+        float phase = 0.f;         // playback position in ticks
+        std::array<Step, kLoopSteps> steps;
+        uint8_t count = 0;
+    };
+
     void _on_pad_touch(uint16_t pad);
     void _on_pad_release(uint16_t pad);
-    void _start(uint8_t index, float at, bool held);
+    void _start(uint8_t index, float at, bool held, bool recorded);
     void _stop(uint8_t voice);
     void _strike(uint8_t index, float at);
-    void _begin_take();
-    void _end_take(bool trim);
-    void _record(Kind kind, uint8_t index, float at);
+    void _clear(Loop& loop);
+    void _begin_take(Loop& loop);
+    void _end_take(Loop& loop, bool trim);
+    bool _record(Loop& loop, Kind kind, uint8_t index, float at);
+    void _play(Loop& loop, const float from, const float to);
     void _replay(const Step& step);
-    void _play(const float from, const float to);
-    uint16_t _bar(const uint16_t hold, const bool trim);
+    uint16_t _bar(Loop& loop, const uint16_t hold, const bool trim);
+    Loop& _loop() { return _loops[_voice ? 1 : 0]; }
 
     Touch& _touch;
     Mound& _mound;
@@ -74,11 +85,12 @@ private:
     float _light_box;
     uint8_t _led_ticks;
     bool _voice;
+    bool _started;
 
     // Each voice: the voice pad it sings, -1 for none; whether it
-    // sounds; whether the loop holds it, so its pad coming up means
-    // nothing; whether it was taken during a take; press order; where
-    // it stands.
+    // sounds; whether the voice loop holds it, so its pad coming up
+    // means nothing; whether it was taken during a take; press order;
+    // where it stands.
     struct Voice {
         int8_t pad;
         bool sounding;
@@ -90,16 +102,8 @@ private:
     std::array<Voice, kVoiceCount> _voices;
     uint16_t _presses;
 
-    // The loop: what you did between two taps of P10, against the
-    // control tick. Plays in either mode.
-    bool _recording;
-    uint16_t _last_step;   // tick of the last thing taken
-    std::array<Step, kLoopSteps> _loop;
-    uint8_t _loop_count;
-    uint16_t _loop_length;
-    uint16_t _loop_tick;
-    float _loop_phase;     // playback position in ticks
-    float _loop_rate;      // ticks per control tick, S30
+    std::array<Loop, 2> _loops;   // drum, voice
+    float _loop_rate;             // ticks per control tick, S30, both loops
 };
 
 };

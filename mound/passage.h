@@ -1,15 +1,15 @@
 #pragma once
 
 #include <array>
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include "daisysp.h"
 #include "nocopy.h"
 #include "config.h"
 
-// The mound as a line, metres along the axis, see config.h. Three
-// sources, the drum and the two voices, each pinned somewhere on it. One
+// The mound as a line, metres along the axis, see config.h. Four
+// sources, the skin, the stone and the two voices, each pinned
+// somewhere on it. One
 // listener, walking. Every source has a delay line: the listener reads
 // it at the distance between them, and two fixed taps feed the chamber
 // and the mouth. The chamber is the reverb and the ring, and its output
@@ -21,7 +21,7 @@ namespace synthux {
 
 class Passage {
 public:
-  static constexpr uint8_t kSourceCount = 1 + kVoiceCount;
+  static constexpr uint8_t kSourceCount = 2 + kVoiceCount; // skin, stone, voices
   static constexpr size_t kLineSize = 4096; // samples, over 28 m at 48 kHz
   static constexpr uint8_t kLineCount = kSourceCount + 3;
   static_assert(kLineSize >= (kOutsideMetres + kPassageMetres + kChamberMetres) * 48000.f / kSpeedOfSound + 4.f,
@@ -39,11 +39,10 @@ public:
   // Where the listener stands now, metres.
   float Listener() const { return _listener; }
 
-  // Ask for a source to be pinned at a position, metres. Taken up by
-  // the next Update, so the audio side sees a whole change. A source
-  // that is sounding should fade across, one that is silent should not,
-  // or its attack softens.
-  void Pin(const uint8_t source, const float metres, const bool fade);
+  // Pin a source at a position, metres. Audio side only, at the start
+  // of a block. A source that is sounding should fade across, one that
+  // is silent should not, or its attack softens.
+  void PinNow(const uint8_t source, const float metres, const bool fade);
 
   // Once per block, ahead of the samples.
   void Update();
@@ -125,10 +124,9 @@ private:
     float from_g_chamber = 0.f;
     float from_g_mouth = 0.f;
     float g_direct = 0.f;            // per block
+    float from_g_direct = 0.f;       // at the last pin, so the level fades with the taps
+    float from_lp_a = 0.f;
     OnePole lp { 0.f, 0.f };
-    float request = 0.f;             // pending pin, metres
-    bool request_fade = false;
-    std::atomic<bool> pending { false };
   };
 
   void _pin(Source& s, const float metres, const bool fade);

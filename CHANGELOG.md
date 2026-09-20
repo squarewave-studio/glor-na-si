@@ -4,6 +4,22 @@ Each release has its built binary attached on the [releases page](https://github
 
     dfu-util -a 0 -s 0x08000000:leave -D glor-na-si-<version>.bin -d ,0483:df11
 
+## v0.4, 20 September 2026
+
+[glor-na-si-v0.4.bin](https://github.com/squarewave-studio/glor-na-si/releases/tag/v0.4)
+
+- The drum is a skin. Eight modes of a circular membrane at the Bessel ratios, and where you strike decides how much each rings: the centre deep and pure, the rim thin and bright. The pads are places on one skin, not notes. The front row is a line across it, P05 the centre, and P08 and P09 are the stick near the rim
+- The strike is a mallet pulse, the same push however hard, so hardness is brightness and the stick, not loudness. No two hits are quite the same
+- S31 in Drum is the size, half to double. S32 is the stiffness, an ideal membrane to a hide. S33 the decay, S34 the hardness
+- Three stones on the top row in Drum, the same stick into a few short bright modes and no skin
+- The modal body from DaisySP is gone, and with it most of the drum's half of the core. The skin and the stones cost about one percent
+- Two loops, one for the drum and one for the voices, each with its own bar and both always playing. P10 takes into the loop of the mode you are in, a take while it runs replaces it, P11 clears that loop
+- The LED is the same in both modes: a flash for everything played, on while recording and off for a beat for everything taken
+- The mode not on at power-up starts from its own settings rather than wherever the knobs happen to sit, and picks up from there
+- The skin's decay runs 1.2 s to 4 s. The old bottom end was too short to sound like a drum
+- The delay lines moved from SDRAM to the core's own memory. Every path runs through them, and the external memory was too slow for it
+- The drum's attack is a dull thwack, not a click
+
 ## v0.3, 20 September 2026
 
 [glor-na-si-v0.3.bin](https://github.com/squarewave-studio/glor-na-si/releases/tag/v0.3)

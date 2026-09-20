@@ -13,6 +13,9 @@ public:
   MValue();
   ~MValue() {}
 
+  // A starting value, which the knob has to reach before it takes over.
+  void Init(const float value);
+
   float Process(const float value, const bool active);
 
   float Value() const { return _value; }

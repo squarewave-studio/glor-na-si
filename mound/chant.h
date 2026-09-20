@@ -44,6 +44,17 @@ public:
     chant_gate(&_b, on);
   }
 
+  // A syllable: vowel, interval and the gate off then on, so a voice
+  // already singing starts again. Audio side only.
+  void Sing(const float vowel, const float semitones) {
+    SetVowel(vowel);
+    SetInterval(semitones);
+    SetGate(false);
+    SetGate(true);
+  }
+
+  void Rest() { SetGate(false); }
+
   // Pot centre is the measured pitch, an octave either way. Live.
   void SetPitch(const float value) {
     _octaves = daisysp::fmap(value, -kVoicePitchOctaves, kVoicePitchOctaves);

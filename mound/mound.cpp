@@ -7,7 +7,7 @@ Mound::Mound():
   _clock { 0 },
   _seconds_per_sample { 1.f / 48000.f } {
   _voice_at.fill(0.f);
-  _vowel.fill(0.f);
+  _sound.fill(SOUND_AAH);
   _semitones.fill(0.f);
 };
 
@@ -16,7 +16,7 @@ void Mound::Init(const float sample_rate, const float buffer_size) {
   _skin.Init(sample_rate);
   _stone.Init(sample_rate);
   for (uint8_t i = 0; i < kVoiceCount; i++) {
-    _chants[i].Init(sample_rate, 11 + 2 * i);
+    _voices[i].Init(sample_rate, 11 + 2 * i);
   }
   _passage.Init(sample_rate);
 };
@@ -30,14 +30,14 @@ void Mound::Strike(const uint8_t index, const float metres) {
   _strikes.Push({ index, metres });
 };
 
-void Mound::Sing(const uint8_t voice, const float vowel, const float semitones, const float metres) {
+void Mound::Sing(const uint8_t voice, const uint8_t sound, const float semitones, const uint8_t technique, const float metres) {
   if (voice >= kVoiceCount) return;
-  _sings.Push({ voice, true, vowel, semitones, metres });
+  _sings.Push({ voice, true, sound, technique, semitones, metres });
 };
 
 void Mound::Rest(const uint8_t voice) {
   if (voice >= kVoiceCount) return;
-  _sings.Push({ voice, false, 0.f, 0.f, 0.f });
+  _sings.Push({ voice, false, 0, 0, 0.f, 0.f });
 };
 
 void Mound::SetSing(const uint8_t voice, const bool on) {
@@ -63,21 +63,21 @@ void Mound::_drain() {
   SingCmd c;
   while (_sings.Pop(c)) {
     if (!c.on) {
-      _chants[c.voice].Rest();
+      _voices[c.voice].Rest();
       continue;
     }
     _voice_at[c.voice] = c.metres;
-    _passage.PinNow(2 + c.voice, c.metres, _chants[c.voice].IsSounding());
-    _chants[c.voice].Sing(c.vowel, c.semitones);
+    _passage.PinNow(2 + c.voice, c.metres, _voices[c.voice].IsSounding());
+    _voices[c.voice].Sing(c.sound, c.semitones, (VoiceTechnique)c.technique);
   }
 };
 
 // The hit knocks every singer, less the further off it was.
 void Mound::_knock(const float metres) {
   for (uint8_t v = 0; v < kVoiceCount; v++) {
-    if (!_chants[v].IsSounding()) continue;
+    if (!_voices[v].IsSounding()) continue;
     auto d = fabsf(metres - _voice_at[v]);
-    _chants[v].Knock(kKnockMax * expf(-d / kKnockMetres));
+    _voices[v].Knock(kKnockMax * expf(-d / kKnockMetres));
   }
 };
 
@@ -92,46 +92,46 @@ void Mound::SetDrumLevel(const float value) {
 };
 
 void Mound::SetVoiceLevel(const float value) {
-  for (auto& chant : _chants) chant.SetLevel(value);
+  for (auto& voice : _voices) voice.SetLevel(value);
 };
 
 void Mound::SetPitch(const float value) {
-  for (auto& chant : _chants) chant.SetPitch(value);
+  for (auto& voice : _voices) voice.SetPitch(value);
 };
 
 void Mound::SetSpread(const float value) {
-  for (auto& chant : _chants) chant.SetSpread(value);
+  for (auto& voice : _voices) voice.SetSpread(value);
 };
 
 void Mound::SetSwell(const float value) {
-  for (auto& chant : _chants) chant.SetSwell(value);
+  for (auto& voice : _voices) voice.SetSwell(value);
 };
 
 void Mound::SetUnsteadiness(const float value) {
-  for (auto& chant : _chants) chant.SetUnsteadiness(value);
+  for (auto& voice : _voices) voice.SetUnsteadiness(value);
 };
 
-// One sample clock for every voice. Voice n rebuilds its table when the
-// clock passes n slots into the block, so the rebuilds take turns. The
-// skin, the stone and the voices go into the passage as separate
+// One sample clock for every voice. Voice n does its block work when
+// the clock passes n slots into the block, so the voices take turns.
+// The skin, the stone and the voices go into the passage as separate
 // sources, each from wherever it was pinned.
 void Mound::Process(float **out, size_t size) {
   _drain();
   std::array<bool, kVoiceCount> sing;
-  for (uint8_t v = 0; v < kVoiceCount; v++) sing[v] = _chants[v].IsSounding();
-  constexpr uint16_t slot = CHANT_BLOCK / kVoiceCount;
+  for (uint8_t v = 0; v < kVoiceCount; v++) sing[v] = _voices[v].IsSounding();
+  constexpr uint16_t slot = voice::kBlock / kVoiceCount;
   std::array<float, Passage::kSourceCount> in;
   _passage.Update();
   auto seconds = size * _seconds_per_sample;
   _skin.Settle(seconds);
-  for (auto& chant : _chants) chant.Settle(seconds);
+  for (auto& voice : _voices) voice.Settle(seconds);
   for (size_t i = 0; i < size; i++) {
     in[0] = _skin.Process();
     in[1] = _stone.Process();
     auto tick = _clock;
-    if (++_clock >= CHANT_BLOCK) _clock = 0;
+    if (++_clock >= voice::kBlock) _clock = 0;
     for (uint8_t v = 0; v < kVoiceCount; v++) {
-      in[2 + v] = sing[v] ? _chants[v].Process(tick == v * slot) : 0.f;
+      in[2 + v] = sing[v] ? _voices[v].Process(tick == v * slot) : 0.f;
     }
     float left, right;
     _passage.Process(in, left, right);

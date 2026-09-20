@@ -11,7 +11,7 @@
 #include "queue.h"
 #include "skin.h"
 #include "stone.h"
-#include "chant.h"
+#include "voice.h"
 #include "passage.h"
 
 namespace synthux {
@@ -32,16 +32,17 @@ public:
   void Strike(const uint8_t index);
   void Strike(const uint8_t index, const float metres);
 
-  // A voice opens on a vowel at an interval, pinned where you say. A
-  // voice already singing starts a new syllable.
-  void Sing(const uint8_t voice, const float vowel, const float semitones, const float metres);
+  // A voice opens on a sound at an interval, sung plain or with a
+  // technique, pinned where you say. A voice already singing moves to
+  // the new syllable.
+  void Sing(const uint8_t voice, const uint8_t sound, const float semitones, const uint8_t technique, const float metres);
   void Rest(const uint8_t voice);
 
-  // The same with a remembered vowel and interval, for the desktop renders.
-  void SetVowel(const uint8_t voice, const float vowel) { _vowel[voice] = vowel; }
+  // The same with a remembered sound and interval, for the desktop renders.
+  void SetSound(const uint8_t voice, const uint8_t sound) { _sound[voice] = sound; }
   void SetInterval(const uint8_t voice, const float semitones) { _semitones[voice] = semitones; }
   void SetSing(const uint8_t voice, const bool on);
-  void Sing(const uint8_t voice, const float metres) { Sing(voice, _vowel[voice], _semitones[voice], metres); }
+  void Sing(const uint8_t voice, const float metres) { Sing(voice, _sound[voice], _semitones[voice], VOICE_PLAIN, metres); }
 
   // Where the listener is going, 0 outside the entrance and 1 the back
   // of the chamber, and where they stand now, in metres.
@@ -74,7 +75,8 @@ private:
   struct SingCmd {
     uint8_t voice;
     bool on;
-    float vowel;
+    uint8_t sound;
+    uint8_t technique;
     float semitones;
     float metres;
   };
@@ -84,11 +86,11 @@ private:
 
   Skin _skin;
   Stone _stone;
-  std::array<Chant, kVoiceCount> _chants;
+  std::array<Voice, kVoiceCount> _voices;
   uint16_t _clock;
   float _seconds_per_sample;
   std::array<float, kVoiceCount> _voice_at;
-  std::array<float, kVoiceCount> _vowel;
+  std::array<uint8_t, kVoiceCount> _sound;
   std::array<float, kVoiceCount> _semitones;
   Queue<StrikeCmd, 8> _strikes;
   Queue<SingCmd, 8> _sings;

@@ -121,9 +121,10 @@ void MoundUI::_on_pad_touch(uint16_t pad) {
         for (uint8_t i = 0; i < kVoicePadCount; i++) {
             if (kVoicePads[i].pad != pad) continue;
             auto at = _mound.Listener();
+            auto sound = _sound_for(i);
             auto& loop = _loops[1];
-            auto taken = loop.recording && _record(loop, SING, i, at);
-            _start(i, at, false, taken);
+            auto taken = loop.recording && _record(loop, SING, i, at, sound);
+            _start(i, at, false, taken, sound);
             return;
         }
         return;
@@ -176,7 +177,7 @@ void MoundUI::_begin_take(Loop& loop) {
     if (!_voice) return;
     for (uint8_t v = 0; v < kVoiceCount; v++) {
         if (!_voices[v].sounding || _voices[v].pad < 0) continue;
-        _voices[v].recorded = _record(loop, SING, _voices[v].pad, _voices[v].at);
+        _voices[v].recorded = _record(loop, SING, _voices[v].pad, _voices[v].at, _voices[v].sound);
     }
 };
 
@@ -198,7 +199,7 @@ void MoundUI::_end_take(Loop& loop, bool trim) {
 // Where in the bar a thing taken now lands: the count so far. Steps
 // keep time order. A vowel is taken only if there is room for its end
 // as well.
-bool MoundUI::_record(Loop& loop, Kind kind, uint8_t index, float at) {
+bool MoundUI::_record(Loop& loop, Kind kind, uint8_t index, float at, uint8_t sound) {
     loop.idle = 0;
     auto room = kind == SING ? kLoopSteps - 1 : kLoopSteps;
     if (loop.count >= room) return false;
@@ -208,7 +209,7 @@ bool MoundUI::_record(Loop& loop, Kind kind, uint8_t index, float at) {
         loop.steps[i] = loop.steps[i - 1];
         i--;
     }
-    loop.steps[i] = { tick, kind, index, at };
+    loop.steps[i] = { tick, kind, index, at, sound };
     _led_ticks = kLedStrikeTicks;
     return true;
 };
@@ -237,7 +238,7 @@ void MoundUI::_replay(const Step& step) {
             if (v.held && v.sounding && v.pad == step.index) return;
             free |= !v.sounding || v.held;
         }
-        if (free) _start(step.index, step.at, true, false);
+        if (free) _start(step.index, step.at, true, false, step.sound);
         break;
     }
     case REST:
@@ -289,7 +290,15 @@ uint16_t MoundUI::_bar(Loop& loop, const uint16_t hold, const bool trim) {
 // older of the ones under your fingers. A voice taken from under a
 // finger during a take has its end taken too, since it has ended. The
 // engine starts a new syllable on a voice already singing.
-void MoundUI::_start(uint8_t index, float at, bool held, bool recorded) {
+// The front row sets the sound. The other pads sing whatever it sang last.
+uint8_t MoundUI::_sound_for(uint8_t index) {
+    auto sound = kVoicePads[index].sound;
+    if (sound == kLastSound) return _last_sound;
+    _last_sound = sound;
+    return sound;
+};
+
+void MoundUI::_start(uint8_t index, float at, bool held, bool recorded, uint8_t sound) {
     uint8_t pick = 0;
     uint8_t best = 3;
     uint16_t oldest = 0;
@@ -306,8 +315,8 @@ void MoundUI::_start(uint8_t index, float at, bool held, bool recorded) {
     if (old.sounding && old.recorded && old.pad >= 0 && _loops[1].recording) {
         _record(_loops[1], REST, old.pad, at);
     }
-    _voices[pick] = { (int8_t)index, true, held, recorded, ++_presses, at };
-    _mound.Sing(pick, kVoicePads[index].vowel, kVoicePads[index].semitones, at);
+    _voices[pick] = { (int8_t)index, true, held, recorded, ++_presses, at, sound };
+    _mound.Sing(pick, sound, kVoicePads[index].semitones, kVoicePads[index].technique, at);
     _led_ticks = kLedStrikeTicks;
 };
 

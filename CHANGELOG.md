@@ -4,6 +4,18 @@ Each release has its built binary attached on the [releases page](https://github
 
     dfu-util -a 0 -s 0x08000000:leave -D glor-na-si-<version>.bin -d ,0483:df11
 
+## v0.5, 20 September 2026
+
+[glor-na-si-v0.5.bin](https://github.com/squarewave-studio/glor-na-si/releases/tag/v0.5)
+
+- A new voice. The chant engine and its measured harmonics are gone. Each singer is now a glottis and a mouth: a model of the vocal folds with breath through it, into five resonances placed where a low male voice puts them for each sound. The sound stays itself when the pitch moves, as a mouth does, and there is top and breath where the old voice had neither
+- Five sounds on the front row: hmm, ooh, aah, ho, aww. hmm and ho open with a soft breath
+- The other pads sing whatever the front row sang last. P00, P01 and P02 take it a fourth, a fifth and an octave up. P08 breaks the voice into an undertone an octave below. P09 picks one overtone out of it and holds it
+- Every note is sung like a person sings it: a scoop in from below, or now and then a flick from above, vibrato that arrives a moment after the onset, a little drift, and a settle as the note stops
+- S34 runs from a machine-steady note on the left, through a person at centre, to a voice coming apart on the right
+- The swell runs 40 ms to 2 s, so a note can start like a syllable
+- The loop remembers which sound each vowel was sung with, so the top and bottom pads come round as they were played
+
 ## v0.4, 20 September 2026
 
 [glor-na-si-v0.4.bin](https://github.com/squarewave-studio/glor-na-si/releases/tag/v0.4)

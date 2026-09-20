@@ -169,32 +169,70 @@ static constexpr uint16_t kLoopMinTicks  = 25;   //about 100 ms
 static constexpr float    kLoopSpeedOctaves = 2.f; //a quarter to four times
 
 // Voice ..................................................................
-// Two voices. Each pad is a vowel (0 mmm, 1 ooh, 2 oh, 3 aah, 4 ah,
-// 5 overtone) at an interval in semitones above the pitch knob.
+// Two voices. Each is two singers a few cents apart. The front row is
+// five sounds at the root. The top row is the last sound you sang, a
+// fourth, a fifth and an octave up. The bottom two are the last sound
+// with a technique: under, the voice breaking into an undertone an
+// octave below, and over, the overtone climbing the harmonics.
 static constexpr uint8_t kVoiceCount = 2;
+
+// What a sound is: five formants and their bandwidths in Hz, how nasal
+// it is, whether it opens with breath before the voice, how breathy it
+// is throughout, and its gain, set so the five come out alike.
+struct VoiceSound {
+  float f[5];
+  float bw[5];
+  float nasal;
+  bool  breath;
+  float breathy;
+  float gain;
+};
+
+static constexpr uint8_t kSoundCount = 5;
+static constexpr std::array<VoiceSound, kSoundCount> kSounds = {{
+  { { 250, 1000, 2200, 3000, 3600 }, { 120, 200, 250, 300, 350 }, 1.f, true,  0.f, 2.5f }, // hmm, closed lips lose most of it
+  { { 300,  700, 2250, 3000, 3600 }, {  80, 100, 140, 180, 220 }, 0.f, false, 0.f, 1.f }, // ooh
+  { { 680, 1050, 2450, 3200, 3700 }, {  80,  90, 120, 150, 200 }, 0.f, false, 0.f, 1.f }, // aah
+  { { 430,  780, 2350, 3050, 3600 }, {  80,  90, 130, 170, 220 }, 0.f, true,  0.f, 1.f }, // hoo, a rounded oh with a soft h
+  { { 580,  880, 2450, 3100, 3600 }, {  80,  90, 120, 150, 200 }, 0.f, false, 0.f, 1.f }, // aww
+}};
+
+// The overtone: the bright formant sits on this harmonic of the note
+// for as long as the pad is held.
+static constexpr float kOvertoneHarmonic = 9.f;
+static constexpr float kOvertoneWidth = 40.f; //Hz, the formant's bandwidth while it picks the overtone
+static constexpr float kOvertoneGain  = 0.55f; //the picked overtone would otherwise be the loudest thing
+static constexpr float kUndertoneGain = 1.35f; //every second pulse is quiet, this makes up for it
+enum { SOUND_HMM, SOUND_OOH, SOUND_AAH, SOUND_HOO, SOUND_AWW };
+static constexpr uint8_t kLastSound = 255;   // whatever the front row sang last, aah to begin with
+
+enum VoiceTechnique : uint8_t { VOICE_PLAIN, VOICE_UNDER, VOICE_OVER };
 
 struct VoicePad {
   uint8_t pad;
-  uint8_t vowel;
+  uint8_t sound;
   float   semitones;
+  uint8_t technique;
 };
 
 static constexpr uint8_t kVoicePadCount = 10;
 static constexpr std::array<VoicePad, kVoicePadCount> kVoicePads = {{
-  { 3, 0, 0.f }, { 4, 1, 0.f }, { 5, 2, 0.f }, { 6, 3, 0.f }, { 7, 4, 0.f }, // front row at the root
-  { 8, 1, 7.f }, { 9, 3, 7.f },                                               // ooh and aah a fifth up
-  { 0, 1, 12.f }, { 1, 3, 12.f }, { 2, 5, 7.f },                              // top row an octave up, overtone at the fifth
+  { 3, SOUND_HMM, 0.f, VOICE_PLAIN }, { 4, SOUND_OOH, 0.f, VOICE_PLAIN }, { 5, SOUND_AAH, 0.f, VOICE_PLAIN },
+  { 6, SOUND_HOO, 0.f, VOICE_PLAIN }, { 7, SOUND_AWW, 0.f, VOICE_PLAIN },                          // the front row, the sounds at the root
+  { 8, kLastSound, 0.f, VOICE_UNDER }, { 9, kLastSound, 0.f, VOICE_OVER },                        // under and over
+  { 0, kLastSound, 5.f, VOICE_PLAIN }, { 1, kLastSound, 7.f, VOICE_PLAIN }, { 2, kLastSound, 12.f, VOICE_PLAIN }, // a fourth, a fifth, an octave up
 }};
 
-static constexpr float kVoicePitch        = 65.9f; //Hz, C2 as the chant was measured, S31 at centre
-static constexpr float kVoicePitchOctaves = 1.f;   //S31 range either side of centre
-static constexpr float kVoiceSpreadMax    = 40.f;  //cents between the two singers, S32 fully clockwise
-static constexpr float kVoiceUnsteadyMax  = 2.f;   //times the engine's own wander and drift, S34 fully clockwise
-static constexpr float kVoiceSwellMin     = 0.15f; //s, on_time at pot minimum
-static constexpr float kVoiceSwellMax     = 3.f;   //s, on_time at pot maximum
-static constexpr float kVoiceReleaseRatio = 1.3f;  //off_time over on_time
-static constexpr float kVoiceGain         = 0.04f; //raw pair peaks near 12, this lands it just under the drum
-static constexpr float kVoiceSilence      = 1e-4f; //env floor, below it the pair stops
+static constexpr float kVoicePitch         = 65.41f; //Hz, C2, S31 at centre
+static constexpr float kVoicePitchOctaves  = 1.f;    //S31 range either side of centre
+static constexpr float kVoiceSpreadMax     = 40.f;   //cents between the two singers, S32 fully clockwise
+static constexpr float kVoiceSwellMin      = 0.04f;  //s, the attack at S33 minimum
+static constexpr float kVoiceSwellMax      = 2.f;    //s, at maximum, log between
+static constexpr float kVoiceReleaseRatio  = 1.6f;   //release over attack
+static constexpr float kVoiceVibratoHz     = 5.4f;   //the first singer
+static constexpr float kVoiceVibratoSpread = 0.5f;   //Hz, the second singer sits this much faster
+static constexpr float kVoiceGain          = 0.012f; //S35 at centre; the raw pair peaks near 9 and a held note in the chamber comes back six times over, this keeps that under the clip
+static constexpr float kVoiceSilence       = 1e-4f;  //intensity floor, below it the voice stops
 
 // A drum hit knocks the singers near it: their wander, drift and rasp
 // jump and settle back. Scaled by S34, so a still singer is unshakeable.

@@ -19,9 +19,10 @@ public:
     _voice { false },
     _started { false },
     _presses { 0 },
+    _last_sound { SOUND_AAH },
     _loop_rate { 1.f }
      {
-        _voices.fill({ -1, false, false, false, 0, 0.f });
+        _voices.fill({ -1, false, false, false, 0, 0.f, SOUND_AAH });
      }
 
     ~MoundUI() {}
@@ -37,6 +38,7 @@ private:
         Kind kind;
         uint8_t index;   // drum pad index, or voice pad index
         float at;        // metres, where the listener stood
+        uint8_t sound;   // for a vowel, the sound it was sung with
     };
 
     // A loop: what you did between two taps of P10 in one mode, against
@@ -55,13 +57,14 @@ private:
 
     void _on_pad_touch(uint16_t pad);
     void _on_pad_release(uint16_t pad);
-    void _start(uint8_t index, float at, bool held, bool recorded);
+    void _start(uint8_t index, float at, bool held, bool recorded, uint8_t sound);
     void _stop(uint8_t voice);
     void _strike(uint8_t index, float at);
     void _clear(Loop& loop);
     void _begin_take(Loop& loop);
     void _end_take(Loop& loop, bool trim);
-    bool _record(Loop& loop, Kind kind, uint8_t index, float at);
+    bool _record(Loop& loop, Kind kind, uint8_t index, float at, uint8_t sound = 0);
+    uint8_t _sound_for(uint8_t index);
     void _play(Loop& loop, const float from, const float to);
     void _replay(const Step& step);
     uint16_t _bar(Loop& loop, const uint16_t hold, const bool trim);
@@ -98,9 +101,11 @@ private:
         bool recorded;
         uint16_t age;
         float at;
+        uint8_t sound;
     };
     std::array<Voice, kVoiceCount> _voices;
     uint16_t _presses;
+    uint8_t _last_sound;          // what the front row sang last, for the other pads
 
     std::array<Loop, 2> _loops;   // drum, voice
     float _loop_rate;             // ticks per control tick, S30, both loops

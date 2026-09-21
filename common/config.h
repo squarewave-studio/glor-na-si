@@ -97,8 +97,7 @@ static constexpr uint8_t kDrumPadCount = kSkinPadCount + kStonePadCount;
 // entrance stone is 0. Outside is negative, the passage runs to
 // kPassageMetres, the chamber beyond it. O'Kelly's plan for the lengths.
 // Sounds are pinned where the listener stood when they started, and the
-// listener walks the fader. Every path is a delay by distance with a
-// loss and a dulling per metre.
+// listener walks the fader.
 static constexpr float kSpeedOfSound      = 343.f;  //m/s
 static constexpr float kOutsideMetres     = 3.f;    //fader bottom stands this far outside
 static constexpr float kPassageMetres     = 19.f;   //entrance stone to the chamber
@@ -107,17 +106,67 @@ static constexpr float kChamberAt         = 22.f;   //where the room lives
 static constexpr float kMouthAt           = 0.f;    //where the passage opens
 static constexpr float kWalkSpeed         = 5.f;    //m/s, the fader is where you are going, this is how fast
 
-static constexpr float kDuctLossDb        = 0.5f;   //dB per metre, every path
+// The passage and chamber as one tube, a section per metre, sound going
+// both ways along it. Each section is the width and height of the real
+// one: the widths read off O'Kelly's plan (fig. 4, the gap between the
+// orthostat rows), the heights off his east-side elevation, floor to
+// roof. Where the section changes, some of the wave turns back, as it
+// does in a tube, so the passage has its own reflections and standing
+// waves. The last six sections are the chamber: the vault at 6 m, the
+// end recess lower and narrower.
+struct PassageSection {
+  float width;  //m
+  float height; //m
+  constexpr float Area() const { return width * height; }
+};
+static constexpr uint8_t kSectionCount = 25;
+static constexpr std::array<PassageSection, kSectionCount> kSections = {{
+  { 1.15f, 1.55f }, { 1.20f, 1.55f }, { 1.25f, 1.55f }, { 1.45f, 1.50f }, { 1.50f, 1.50f }, //  0 to  5 m
+  { 1.50f, 1.50f }, { 1.45f, 1.60f }, { 1.50f, 1.60f }, { 1.35f, 1.60f }, { 1.20f, 1.65f }, //  5 to 10 m
+  { 1.10f, 1.80f }, { 1.00f, 1.90f }, { 1.10f, 1.95f }, { 1.35f, 2.00f }, { 1.45f, 2.20f }, // 10 to 15 m
+  { 1.25f, 2.30f }, { 1.25f, 2.60f }, { 1.00f, 2.80f }, { 1.15f, 3.00f }, { 1.40f, 3.30f }, // 15 to 19 m, the roof climbing
+  { 2.00f, 4.50f }, { 3.00f, 6.00f }, { 3.00f, 6.00f }, { 3.00f, 6.00f }, { 2.00f, 3.50f }, // the chamber, then the end recess
+}};
+
+// Losses along the tube. Stone hardly takes the low end, so a wave
+// carries the length of the passage and back, but the top goes: one
+// pole per metre. Near a source the sound still spreads as 1/r until
+// the passage takes it, out to kSpreadMetres, so standing on top of a
+// sound is dry and close.
+static constexpr float kDuctLossDb        = 0.1f;   //dB per metre, broadband, the gaps between the orthostats leaking into the cairn
+static constexpr float kDuctCutoff        = 10000.f;//Hz, the pole per metre, about 1.9 kHz by the chamber
 static constexpr float kSpreadMetres      = 6.f;    //direct sound falls 1/r this far, then the passage guides it
-static constexpr float kCutoffNear        = 12000.f;//Hz at no distance
-static constexpr float kCutoffHalfMetres  = 6.f;    //the cutoff halves every this many metres
+
+// The ends. The mouth is open: what arrives reflects inverted, whole at
+// the bottom and less and less above the frequency where the opening is
+// about a wavelength across, and what does not reflect is what you hear
+// outside. The back of the end recess is stone, most of it comes back.
+// Where the passage opens into the chamber the plane wave is only a
+// plane wave in the low end, so the reflection off that opening is
+// low-passed and the room takes the rest.
+static constexpr float kMouthReflect      = 0.95f;
+static constexpr float kMouthCutoff       = 120.f;  //Hz, the opening is about a wavelength across here, the gate and K1 in front of it
+static constexpr float kBackReflect       = 0.9f;
+static constexpr float kBackCutoff        = 3000.f; //Hz
+static constexpr float kChamberOpenCutoff = 400.f;  //Hz
+static constexpr float kOutsideCouple     = 0.5f;   //how much of a sound made outside gets into the mouth
 static constexpr float kOutsideLossDb     = 8.f;    //extra loss at the fader bottom
 static constexpr float kOutsideCutoff     = 0.3f;   //cutoff scale at the fader bottom
 
-static constexpr float kChamberSend       = 1.f;
-static constexpr float kChamberReturn     = 2.f;
+// The room. Every source feeds it at the level the tube carries, later
+// by its distance to the chamber, and what comes back goes into the
+// tube at kChamberAt like any other sound, so the room's answer meets
+// the mouth and the passage the way a voice does. The reverb's width,
+// what differs between its two sides, is heard on a line of its own,
+// fading with distance from the chamber.
+static constexpr float kChamberSend       = 6.f;
+static constexpr float kChamberReturn     = 0.8f;
 static constexpr float kChamberFeedback   = 0.9f;
 static constexpr float kChamberLp         = 4000.f; //Hz
+static constexpr float kSendMetres        = 14.f;   //the send is late by its distance, up to this
+static constexpr float kSideMetres        = 12.f;   //the width falls off over this many metres from the chamber
+static constexpr float kCutoffNear        = 12000.f;//Hz, the width with no distance
+static constexpr float kCutoffHalfMetres  = 6.f;    //its cutoff halves every this many metres
 
 // The ring. Jahn, Devereux and Ibison measured the main resonance near
 // 110 Hz; the second is a guess at the east recess from the plan. The
@@ -132,9 +181,6 @@ static constexpr std::array<ChamberMode, 2> kChamberModes = {{
   { 110.f, 0.8f, 3.f },
   {  86.f, 0.6f, 1.5f },
 }};
-
-static constexpr float kMouthReflect      = -0.5f;  //the open end sends a dull inverted slap back up
-static constexpr float kMouthCutoff       = 800.f;  //Hz
 
 // The passage colours what comes through it by its height, which rises
 // from the entrance to the chamber (fig. 17). One peak that slides with

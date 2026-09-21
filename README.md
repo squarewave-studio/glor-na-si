@@ -14,7 +14,7 @@ The one thing I keep returning to is the roof-box at Newgrange. For a few minute
 
 ## Firmware
 
-v0.5 runs on a Daisy Seed in a Synthux Simple Touch. Two sounds and one gesture: strike a skin or hold a voice where you stand, then walk the passage and hear how the mound carries it.
+v0.6 runs on a Daisy Seed in a Synthux Simple Touch. Two sounds and one gesture: strike a skin or hold a voice where you stand, then walk the passage and hear how the mound carries it.
 
 The firmware is a fork of Synthux Academy's [TouchString](https://github.com/Synthux-Academy/TouchString), with the string engine swapped for a drum and a chamber. See [CREDITS.md](CREDITS.md).
 
@@ -65,11 +65,11 @@ The onboard LED flashes on everything you play, a hit or a vowel, in either mode
 
 ### The passage
 
-The instrument is a line, measured in metres along the axis of Newgrange from O'Kelly's excavation plan. The entrance stone is 0. The passage runs 19 m to the chamber, which goes on for another 6 m, and the bottom of the walk fader stands 3 m outside. Sound travels along the line at 343 m/s, so a strike at the back of the chamber reaches the entrance about 65 ms later, and it loses level and top for every metre of stone it passes.
+The instrument is a tube, measured in metres along the axis of Newgrange from O'Kelly's excavation plan. The entrance stone is 0. The passage runs 19 m to the chamber, which goes on for another 6 m, and the bottom of the walk fader stands 3 m outside. Each metre of it is the width and height of the real one, read off O'Kelly's plan and his elevation of the east side: about a metre and a half wide and high near the entrance, the roof climbing past three metres by the chamber, the chamber's vault at six. Sound goes both ways along it at 343 m/s, and wherever the tube changes size some of it turns back, as in any tube. At the mouth it reflects inverted, whole in the low end and less above the frequency where the opening is about a wavelength across, and what does not reflect is what you hear from outside. At the back of the end recess it is stone and most of it comes back. So the passage has its own echoes, a slap between the mouth and the chamber every tenth of a second, and its own standing waves: hold a low note and there are places along the walk where it is loud and places where it nearly goes, half a wavelength apart, and they slide when the pitch does.
 
-Each drum hit and each voice is pinned where you stood when it started. What you hear from it is the direct sound over the distance between you and the chamber's answer coming back down the passage, a reverb and a ring. The open mouth adds a dull inverted slap. Stand on top of a sound and it is dry and close. Walk away and the room takes over, then the whole thing recedes until outside there is only a murmur from the opening. The passage also colours what passes through it. Its walls are a metre apart, so everything rings faintly between them, and its height, low at the entrance and high by the chamber, gives it a note that slides as you walk.
+Each drum hit and each voice is pinned where you stood when it started and put into the tube there. Close to it the sound still spreads as it would in the open, so standing on top of a sound is dry and close, and from a few metres out the passage carries it, losing little level and steadily more top for every metre of stone. The chamber's answer, a reverb and a ring, goes into the tube at the chamber like any other sound, so it too meets the mouth and stands in the passage. Walk away and the room takes over, then the whole thing recedes until outside there is only what leaves the opening. The passage also colours what passes through it. Its walls are a metre apart, so everything rings faintly between them, and its height, low at the entrance and high by the chamber, gives it a note that slides as you walk.
 
-Jahn, Devereux and Ibison (1996) measured the chambers of Irish and British passage tombs resonating between 95 and 120 Hz. The chamber here rings at 110 Hz, and more quietly at 86 Hz for the east recess, so a voice tuned onto the ring comes back louder than one that is not. The lengths, the losses and the ring are all in [config.h](common/config.h).
+Jahn, Devereux and Ibison (1996) measured the chambers of Irish and British passage tombs resonating between 95 and 120 Hz. The chamber here rings at 110 Hz, and more quietly at 86 Hz for the east recess, so a voice tuned onto the ring comes back louder than one that is not. The sections, the losses and the ring are all in [config.h](common/config.h).
 
 ### Project Structure
 ```
@@ -81,6 +81,8 @@ glor-na-si/
 ├── touch/               # Simple Touch wrapper (pads, knobs, switches)
 └── ui/                  # UI connecting instrument core with touch wrapper
 ```
+
+Everything here is MIT apart from `mound/reverb.h` and `mound/reverb.cpp`, which are Sean Costello's reverb from DaisySP-LGPL under the LGPL 2.1, with the buffer sized for 48 kHz. See [CREDITS.md](CREDITS.md).
 
 ### Project Setup
 The firmware builds against the libDaisy and DaisySP checkouts inside a Synthux TouchString clone, which the Makefile expects at `~/Development/Daisy/TouchString`. Set `TOUCHSTRING_DIR` to use a clone somewhere else.
@@ -95,4 +97,4 @@ $ make program-dfu
 For the [Daisy web programmer](https://electro-smith.github.io/Programmer/), flash `build/GlorNaSi.bin`, or a build from the [releases page](https://github.com/squarewave-studio/glor-na-si/releases) if you would rather skip the toolchain. [CHANGELOG.md](CHANGELOG.md) says what each one does.
 
 ### Configuration
-Edit [config.h](common/config.h) to retune the pads, the drum ranges, the voice's sounds and the passage: its lengths, its losses, the ring and the walking speed.
+Edit [config.h](common/config.h) to retune the pads, the drum ranges, the voice's sounds and the passage: its sections, its losses, the ring and the walking speed.

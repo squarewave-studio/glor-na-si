@@ -4,6 +4,16 @@ Each release has its built binary attached on the [releases page](https://github
 
     dfu-util -a 0 -s 0x08000000:leave -D glor-na-si-<version>.bin -d ,0483:df11
 
+## v0.6, 21 September 2026
+
+[glor-na-si-v0.6.bin](https://github.com/squarewave-studio/glor-na-si/releases/tag/v0.6)
+
+- The passage is a tube. Sound goes both ways along it, a section per metre at the width and height O'Kelly drew, and turns back wherever the tube changes and at both ends, the open mouth and the stone at the back of the chamber. So the passage has its own echoes and its own standing waves: hold a low note and there are loud places and quiet places along the walk, half a wavelength apart, that move with the pitch
+- The chamber's answer goes into the tube like any other sound, so the room's reverb and ring meet the mouth and stand in the passage too
+- Little level is lost along the passage, as in stone, so a held note carries the length of it. What goes with distance is the top
+- Four private delay lines become one shared pair, less memory and less work
+- The chamber's reverb is a copy of Costello's ReverbSc with its buffer sized for 48 kHz, 98 KB in place of 396, so there is room for what comes next
+
 ## v0.5, 20 September 2026
 
 [glor-na-si-v0.5.bin](https://github.com/squarewave-studio/glor-na-si/releases/tag/v0.5)

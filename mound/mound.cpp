@@ -121,7 +121,7 @@ void Mound::Process(float **out, size_t size) {
   for (uint8_t v = 0; v < kVoiceCount; v++) sing[v] = _voices[v].IsSounding();
   constexpr uint16_t slot = voice::kBlock / kVoiceCount;
   std::array<float, Passage::kSourceCount> in;
-  _passage.Update();
+  _passage.Update(size);
   auto seconds = size * _seconds_per_sample;
   _skin.Settle(seconds);
   for (auto& voice : _voices) voice.Settle(seconds);
